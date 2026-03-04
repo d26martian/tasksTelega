@@ -93,8 +93,8 @@ const handleEdit = async (task) => {
 };
 
 onMounted(() => {
-  user.value = tg.initDataUnsafe?.user;
-  loadTasks();
+  // user.value = tg.initDataUnsafe?.user;
+  // loadTasks();
   
   // Set header color
   tg.setHeaderColor(tg.colorScheme === 'dark' ? '#1a1a1a' : '#ffffff');
