@@ -37,15 +37,42 @@ const user = ref(null);
 const isDark = computed(() => tg.colorScheme === 'dark');
 const isInTelegram = computed(() => !tg.devMode && window.Telegram?.WebApp);
 
+// Prevent double-tap zoom globally
+onMounted(() => {
+  // Disable double-tap zoom
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+  
+  // Prevent pinch zoom
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+  
+  // Load user and tasks
+  if (tg.initDataUnsafe?.user) {
+    user.value = tg.initDataUnsafe.user;
+  } else if (tg.devMode) {
+    user.value = { first_name: 'Developer', id: 123456 };
+  }
+  
+  loadTasks();
+});
+
 const loadTasks = async () => {
   try {
     const { data } = await taskApi.getAll();
     tasks.value = data;
   } catch (error) {
     console.error('Failed to load tasks:', error);
-    if (tg.showAlert) {
-      tg.showAlert('Failed to load tasks');
-    }
+    if (tg.showAlert) tg.showAlert('Failed to load tasks');
   }
 };
 
@@ -66,14 +93,9 @@ const handleToggle = async (task) => {
   try {
     const { data } = await taskApi.toggle(task.id);
     const index = tasks.value.findIndex(t => t.id === task.id);
-    if (index !== -1) {
-      tasks.value[index] = data;
-    }
-    if (tg.HapticFeedback) {
-      tg.HapticFeedback.impactOccurred('light');
-    }
+    if (index !== -1) tasks.value[index] = data;
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
   } catch (error) {
-    console.error('Failed to toggle task:', error);
     if (tg.showAlert) tg.showAlert('Failed to update task');
   }
 };
@@ -82,50 +104,35 @@ const handleDelete = async (id) => {
   try {
     await taskApi.delete(id);
     tasks.value = tasks.value.filter(t => t.id !== id);
-    if (tg.HapticFeedback) {
-      tg.HapticFeedback.impactOccurred('medium');
-    }
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
   } catch (error) {
-    console.error('Failed to delete task:', error);
     if (tg.showAlert) tg.showAlert('Failed to delete task');
   }
 };
 
 const handleEdit = async (task) => {
-  // Simple prompt fallback for dev mode
   const newTitle = prompt('Edit task title:', task.title);
-  
-  if (newTitle && newTitle.trim() && newTitle !== task.title) {
+  if (newTitle?.trim() && newTitle !== task.title) {
     try {
       const { data } = await taskApi.update(task.id, { title: newTitle.trim() });
       const index = tasks.value.findIndex(t => t.id === task.id);
-      if (index !== -1) {
-        tasks.value[index] = data;
-      }
+      if (index !== -1) tasks.value[index] = data;
     } catch (error) {
-      console.error('Failed to update task:', error);
       if (tg.showAlert) tg.showAlert('Failed to update task');
     }
   }
 };
-
-onMounted(() => {
-  // Safely get user data
-  if (tg.initDataUnsafe?.user) {
-    user.value = tg.initDataUnsafe.user;
-  } else if (tg.devMode) {
-    user.value = { first_name: 'Developer', id: 123456 };
-  }
-  
-  // loadTasks();
-});
 </script>
 
 <style>
+/* Reset and base styles */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* Prevent text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 :root {
@@ -137,7 +144,7 @@ onMounted(() => {
   --success-color: #31b545;
   --danger-color: #e74c3c;
   --border-color: #e0e0e0;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow: 0 2px 8px rgba(0,0,0,0.1);
   --warning-bg: #fff3cd;
   --warning-text: #856404;
 }
@@ -148,27 +155,53 @@ onMounted(() => {
   --text-color: #ffffff;
   --text-secondary: #aaaaaa;
   --border-color: #333333;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
   --warning-bg: #3d3d00;
   --warning-text: #ffeb3b;
 }
 
+/* Critical: Prevent zoom on html/body */
+html {
+  /* Prevent zoom gestures */
+  touch-action: pan-x pan-y;
+  /* Prevent double-tap zoom */
+  touch-action: manipulation;
+  height: 100%;
+  /* Ensure consistent text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-color);
   color: var(--text-color);
   line-height: 1.6;
+  /* Prevent pull-to-refresh and zoom */
+  overscroll-behavior: none;
+  /* Ensure full height without zoom issues */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  /* Prevent font scaling */
+  font-size: 16px;
 }
 
+/* App container */
 .app {
   min-height: 100vh;
+  min-height: -webkit-fill-available;
   padding-bottom: 20px;
+  /* GPU acceleration for smooth rendering */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .container {
   max-width: 600px;
   margin: 0 auto;
   padding: 16px;
+  /* Prevent container from causing zoom */
+  transform: translateZ(0);
 }
 
 .header {
@@ -181,6 +214,8 @@ body {
   font-size: 24px;
   margin-bottom: 4px;
   color: var(--text-color);
+  /* Prevent zoom on text */
+  font-size: 24px;
 }
 
 .user-info p {
@@ -206,5 +241,46 @@ body {
   margin-bottom: 16px;
   text-align: center;
   font-weight: 500;
+  font-size: 14px;
+}
+
+/* Global input/textarea styles to prevent zoom */
+input, textarea, select, button {
+  font-size: 16px !important;
+  /* Prevent iOS default styling */
+  -webkit-appearance: none;
+  appearance: none;
+  /* Prevent zoom on focus */
+  transform: scale(1);
+}
+
+/* Ensure buttons don't zoom */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent zoom on double-tap */
+@media (pointer: coarse) {
+  * {
+    touch-action: manipulation;
+  }
+}
+
+/* iOS specific fixes */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Fix for iOS height issues */
+    min-height: -webkit-fill-available;
+  }
+  
+  /* Prevent callout menu that can cause zoom */
+  * {
+    -webkit-touch-callout: none;
+  }
+  
+  input, textarea {
+    -webkit-touch-callout: default;
+  }
 }
 </style>
